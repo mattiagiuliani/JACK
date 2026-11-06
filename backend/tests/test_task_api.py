@@ -1,20 +1,40 @@
+from collections.abc import Generator
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
+from app.db.base import Base
+from app.db.session import get_db
 from app.main import app
-from app.tasks.manager import TaskManager
+from app.tasks.db_models import TaskDB  # noqa: F401
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    fresh_manager = TaskManager()
+def client(tmp_path: Path) -> Generator[TestClient, None, None]:
+    database_url = f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
 
-    monkeypatch.setattr(
-        "app.tasks.router.task_manager",
-        fresh_manager,
+    engine = create_engine(
+        database_url,
+        connect_args={"check_same_thread": False},
     )
 
-    return TestClient(app)
+    Base.metadata.create_all(engine)
+
+    def override_get_db() -> Generator[Session, None, None]:
+        with Session(engine) as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()
 
 
 def test_create_task(client: TestClient) -> None:
@@ -107,7 +127,7 @@ def test_update_task_status(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.json()["status"] == "running"
 
-    # Verifica che lo stato sia stato salvato nel manager.
+    # Verifica che lo stato sia stato salvato nel database.
     get_response = client.get(f"/tasks/{created['id']}")
     assert get_response.json()["status"] == "running"
 

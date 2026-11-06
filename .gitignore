@@ -18,3 +18,8 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
