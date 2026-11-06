@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.tasks.router import router as tasks_router
 
 settings = get_settings()
 
@@ -10,6 +11,8 @@ app = FastAPI(
     description="Autonomous Business Builder",
     version=settings.app_version,
 )
+
+app.include_router(tasks_router)
 
 
 class HealthResponse(BaseModel):
