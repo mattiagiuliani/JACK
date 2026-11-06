@@ -88,3 +88,68 @@ def test_invalid_task_id(client: TestClient) -> None:
     response = client.get("/tasks/not-a-uuid")
 
     assert response.status_code == 422
+
+
+def test_update_task_status(client: TestClient) -> None:
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Market research",
+            "description": "Analyze SaaS opportunities",
+        },
+    ).json()
+
+    response = client.patch(
+        f"/tasks/{created['id']}/status",
+        json={"status": "running"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "running"
+
+    # Verifica che lo stato sia stato salvato nel manager.
+    get_response = client.get(f"/tasks/{created['id']}")
+    assert get_response.json()["status"] == "running"
+
+
+def test_invalid_status_transition(client: TestClient) -> None:
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Market research",
+            "description": "Analyze SaaS opportunities",
+        },
+    ).json()
+
+    response = client.patch(
+        f"/tasks/{created['id']}/status",
+        json={"status": "completed"},
+    )
+
+    assert response.status_code == 409
+
+
+def test_update_nonexistent_task(client: TestClient) -> None:
+    response = client.patch(
+        "/tasks/550e8400-e29b-41d4-a716-446655440000/status",
+        json={"status": "running"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_invalid_status_value(client: TestClient) -> None:
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Market research",
+            "description": "Analyze SaaS opportunities",
+        },
+    ).json()
+
+    response = client.patch(
+        f"/tasks/{created['id']}/status",
+        json={"status": "unknown"},
+    )
+
+    assert response.status_code == 422

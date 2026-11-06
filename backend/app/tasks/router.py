@@ -4,7 +4,8 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.tasks.manager import TaskManager, TaskNotFoundError
-from app.tasks.models import Task, TaskPriority
+from app.tasks.models import Task, TaskPriority, TaskStatus
+from app.tasks.state_machine import InvalidTaskTransitionError
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 task_manager = TaskManager()
@@ -14,6 +15,10 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=120)
     description: str = Field(min_length=1)
     priority: TaskPriority = TaskPriority.MEDIUM
+
+
+class TaskStatusUpdate(BaseModel):
+    status: TaskStatus
 
 
 @router.post(
@@ -42,4 +47,26 @@ def get_task(task_id: UUID) -> Task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found",
+        ) from exc
+
+
+@router.patch("/{task_id}/status", response_model=Task)
+def update_task_status(
+    task_id: UUID,
+    payload: TaskStatusUpdate,
+) -> Task:
+    try:
+        return task_manager.update_status(
+            task_id,
+            payload.status,
+        )
+    except TaskNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        ) from exc
+    except InvalidTaskTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
         ) from exc
