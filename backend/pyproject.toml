@@ -17,6 +17,8 @@ quote-style = "double"
 indent-style = "space"
 
 [tool.pyright]
+venvPath = "."
+venv = ".venv"
 include = ["app", "tests"]
 exclude = [".venv", "**/__pycache__"]
 pythonVersion = "3.12"
