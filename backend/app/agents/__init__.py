@@ -1,6 +1,12 @@
 """Specialized agents coordinated by JACK's task engine."""
 
 from app.agents.base import Agent
+from app.agents.orchestrator import (
+    AgentOrchestrator,
+    AgentResult,
+    AgentWorkflowError,
+    WorkflowResult,
+)
 from app.agents.registry import (
     AgentAlreadyRegisteredError,
     AgentNotFoundError,
@@ -12,4 +18,8 @@ __all__ = [
     "AgentAlreadyRegisteredError",
     "AgentNotFoundError",
     "AgentRegistry",
+    "AgentOrchestrator",
+    "AgentResult",
+    "AgentWorkflowError",
+    "WorkflowResult",
 ]
