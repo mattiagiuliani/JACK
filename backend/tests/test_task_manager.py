@@ -92,3 +92,42 @@ def test_list_returns_independent_copies(
     tasks[0].title = "Changed"
 
     assert manager.get_task(created.id).title == "Research"
+
+
+def test_complete_task(manager: TaskManager) -> None:
+    task = manager.create_task(
+        "Market research",
+        "Analyze SaaS opportunities",
+    )
+
+    manager.update_status(task.id, TaskStatus.RUNNING)
+
+    completed = manager.complete_task(
+        task.id,
+        "Identified three potential markets",
+    )
+
+    assert completed.status == TaskStatus.COMPLETED
+    assert completed.result == "Identified three potential markets"
+
+    stored = manager.get_task(task.id)
+
+    assert stored.status == TaskStatus.COMPLETED
+    assert stored.result == "Identified three potential markets"
+
+
+def test_cannot_complete_pending_task(
+    manager: TaskManager,
+) -> None:
+    task = manager.create_task(
+        "Market research",
+        "Analyze SaaS opportunities",
+    )
+
+    with pytest.raises(InvalidTaskTransitionError):
+        manager.complete_task(task.id, "Unexpected result")
+
+    stored = manager.get_task(task.id)
+
+    assert stored.status == TaskStatus.PENDING
+    assert stored.result is None

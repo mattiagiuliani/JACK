@@ -6,8 +6,14 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.tasks.executor import TaskExecutor
 from app.tasks.manager import TaskManager, TaskNotFoundError
 from app.tasks.models import Task, TaskPriority, TaskStatus
+from app.tasks.operations import build_registry
+from app.tasks.registry import (
+    OperationNotFoundError,
+    OperationRegistry,
+)
 from app.tasks.repository import TaskRepository
 from app.tasks.state_machine import InvalidTaskTransitionError
 
@@ -28,6 +34,10 @@ class TaskCreate(BaseModel):
 
 class TaskStatusUpdate(BaseModel):
     status: TaskStatus
+
+
+class ExecuteTaskRequest(BaseModel):
+    operation: str = Field(min_length=1)
 
 
 @router.post(
@@ -80,6 +90,45 @@ def update_task_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found",
         ) from exc
+    except InvalidTaskTransitionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+operation_registry = build_registry()
+
+
+def get_operation_registry() -> OperationRegistry:
+    return operation_registry
+
+
+@router.post("/{task_id}/execute", response_model=Task)
+def execute_task(
+    task_id: UUID,
+    payload: ExecuteTaskRequest,
+    manager: Annotated[TaskManager, Depends(get_task_manager)],
+    registry: Annotated[OperationRegistry, Depends(get_operation_registry)],
+) -> Task:
+    executor = TaskExecutor(manager, registry)
+
+    try:
+        manager.get_task(task_id)
+        return executor.execute_registered(task_id, payload.operation)
+
+    except TaskNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found",
+        ) from exc
+
+    except OperationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
     except InvalidTaskTransitionError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

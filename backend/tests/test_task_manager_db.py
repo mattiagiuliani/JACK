@@ -79,3 +79,42 @@ def test_status_transition_persists(tmp_path: Path) -> None:
 
     finally:
         engine.dispose()
+
+
+def test_task_result_persists(tmp_path: Path) -> None:
+    database_url = f"sqlite:///{(tmp_path / 'test.db').as_posix()}"
+    engine = create_engine(database_url)
+
+    try:
+        Base.metadata.create_all(engine)
+
+        with Session(engine) as session:
+            manager = TaskManager(TaskRepository(session))
+
+            task = manager.create_task(
+                title="Market research",
+                description="Analyze SaaS opportunities",
+            )
+
+            manager.update_status(
+                task.id,
+                TaskStatus.RUNNING,
+            )
+
+            completed = manager.complete_task(
+                task.id,
+                "Three validated business opportunities",
+            )
+
+            assert completed.status == TaskStatus.COMPLETED
+
+        with Session(engine) as session:
+            manager = TaskManager(TaskRepository(session))
+
+            recovered = manager.get_task(task.id)
+
+            assert recovered.status == TaskStatus.COMPLETED
+            assert recovered.result == "Three validated business opportunities"
+
+    finally:
+        engine.dispose()

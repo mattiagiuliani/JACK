@@ -73,3 +73,24 @@ class TaskManager:
 
         self._tasks[task_id] = task
         return task.model_copy(deep=True)
+
+    def complete_task(
+        self,
+        task_id: UUID,
+        result: str,
+    ) -> Task:
+        task = self.get_task(task_id)
+
+        transition_task(task, TaskStatus.COMPLETED)
+        task.result = result
+
+        if self._repository is not None:
+            updated = self._repository.update(task)
+
+            if updated is None:
+                raise TaskNotFoundError(f"Task {task_id} not found")
+
+            return updated.model_copy(deep=True)
+
+        self._tasks[task_id] = task
+        return task.model_copy(deep=True)

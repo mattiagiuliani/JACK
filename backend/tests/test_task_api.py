@@ -173,3 +173,88 @@ def test_invalid_status_value(client: TestClient) -> None:
     )
 
     assert response.status_code == 422
+
+
+def test_execute_task_success(client: TestClient) -> None:
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Market research",
+            "description": "Analyze SaaS opportunities",
+        },
+    )
+    assert created.status_code == 201
+
+    task_id = created.json()["id"]
+
+    response = client.post(
+        f"/tasks/{task_id}/execute",
+        json={"operation": "market_research"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "completed"
+    assert response.json()["result"] == ("Market research operation executed")
+
+    stored = client.get(f"/tasks/{task_id}")
+    assert stored.status_code == 200
+    assert stored.json()["status"] == "completed"
+    assert stored.json()["result"] == ("Market research operation executed")
+
+
+def test_execute_unknown_operation(client: TestClient) -> None:
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Market research",
+            "description": "Analyze opportunities",
+        },
+    )
+    task_id = created.json()["id"]
+
+    response = client.post(
+        f"/tasks/{task_id}/execute",
+        json={"operation": "unknown"},
+    )
+
+    assert response.status_code == 400
+
+    stored = client.get(f"/tasks/{task_id}")
+    assert stored.json()["status"] == "pending"
+
+
+def test_execute_missing_task(client: TestClient) -> None:
+    from uuid import uuid4
+
+    response = client.post(
+        f"/tasks/{uuid4()}/execute",
+        json={"operation": "market_research"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_execute_completed_task_conflict(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Market research",
+            "description": "Analyze opportunities",
+        },
+    )
+    task_id = created.json()["id"]
+
+    first = client.post(
+        f"/tasks/{task_id}/execute",
+        json={"operation": "market_research"},
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        f"/tasks/{task_id}/execute",
+        json={"operation": "market_research"},
+    )
+
+    assert second.status_code == 409
