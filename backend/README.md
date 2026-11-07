@@ -57,3 +57,49 @@ provide resumable workflows or automatic retries.
 This coordinator performs no paid AI calls and adds no spending authorization,
 production agents, automatic routing, or HTTP execution endpoints. Register only
 agents authorized for the intended work; registration is not a permission grant.
+
+## Milestone 09.3 — Business Research Agent
+
+`BusinessResearchAgent` implements the existing `Agent.execute(Task) -> str`
+contract. The topic is `task.description` (trimmed); output is a JSON
+`ResearchReport`. It never changes task state and does not consume preceding
+workflow output as instructions. The existing orchestrator owns execution,
+errors, sequential handoff and persistence. Existing HTTP APIs and the legacy
+`market_research` operation are unchanged.
+
+```python
+from app.agents import AgentOrchestrator, AgentRegistry, BusinessResearchAgent
+from app.tasks.manager import TaskManager
+
+manager = TaskManager()
+registry = AgentRegistry()
+registry.register("business_research", BusinessResearchAgent())
+task = manager.create_task("Business research", "JACK research demo")
+workflow = AgentOrchestrator(manager, registry).delegate(task.id, "business_research")
+# ResearchReport.model_validate_json(workflow.steps[0].output)
+```
+
+The default provider is deterministic and entirely offline, with no API keys,
+paid services or additional dependencies. Only `JACK research demo` matches the
+controlled corpus in `app/agents/research_corpus.py`. Its `fixture://` locator
+identifies the local document and constant; it is explicitly synthetic, not a
+market source. Other topics return an empty evidence set with limitations.
+Absence of fixture evidence says nothing about a real market.
+
+Reports separate quoted evidence from hypotheses, require explicit limitations,
+reject duplicate evidence IDs and dangling hypothesis references, and preserve
+source title, URI, excerpt and provenance. Evidence statements must appear in
+the quoted excerpt. Hypotheses require a validation step. These checks enforce
+structure and traceability, not source truth or current Internet verification.
+No demand, competitor, price or market-size claims are generated.
+
+Future retrieval adapters implement `ResearchProvider.research(topic)` and are
+injected into `BusinessResearchAgent(provider)`. They must return a validated
+report for that topic with external HTTPS sources and explicit limitations.
+Adapters remain responsible for actual retrieval, source verification, freshness,
+timeouts and authorization for any network usage or cost. Provider failures
+propagate through the existing orchestrator to the Task Engine; they are never
+silently replaced with invented findings. No Internet adapter is enabled here.
+
+Validation: `.venv/Scripts/ruff check .`, `.venv/Scripts/ruff format --check .`,
+`.venv/Scripts/pyright`, `.venv/Scripts/python -m pytest` from `backend`.
