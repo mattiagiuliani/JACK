@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +11,9 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.tasks.db_models import TaskDB  # noqa: F401
+from app.tasks.manager import TaskManager, TaskTransitionConflictError
+from app.tasks.registry import OperationRegistry
+from app.tasks.router import get_operation_registry
 
 
 @pytest.fixture
@@ -258,3 +262,141 @@ def test_execute_completed_task_conflict(
     )
 
     assert second.status_code == 409
+
+
+def test_execute_task_operation_failure(
+    client: TestClient,
+) -> None:
+    registry = OperationRegistry()
+
+    def failing_operation() -> str:
+        raise RuntimeError("Secret internal failure")
+
+    registry.register("failing_operation", failing_operation)
+
+    app.dependency_overrides[get_operation_registry] = lambda: registry
+
+    try:
+        created = client.post(
+            "/tasks",
+            json={
+                "title": "Failing research",
+                "description": "Test operation failure",
+            },
+        )
+
+        assert created.status_code == 201
+        task_id = created.json()["id"]
+
+        response = client.post(
+            f"/tasks/{task_id}/execute",
+            json={"operation": "failing_operation"},
+        )
+
+        assert response.status_code == 500
+        assert response.json() == {"detail": "Task execution failed"}
+        assert "Secret internal failure" not in response.text
+
+        stored = client.get(f"/tasks/{task_id}")
+
+        assert stored.status_code == 200
+        assert stored.json()["status"] == "failed"
+        assert stored.json()["result"] == "Secret internal failure"
+
+    finally:
+        app.dependency_overrides.pop(
+            get_operation_registry,
+            None,
+        )
+
+
+def test_execute_running_task_conflict(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Market research",
+            "description": "Analyze competitors",
+        },
+    )
+
+    assert created.status_code == 201
+    task_id = created.json()["id"]
+
+    running = client.patch(
+        f"/tasks/{task_id}/status",
+        json={"status": "running"},
+    )
+
+    assert running.status_code == 200
+
+    response = client.post(
+        f"/tasks/{task_id}/execute",
+        json={"operation": "market_research"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == ("Task cannot be claimed for execution")
+
+    stored = client.get(f"/tasks/{task_id}")
+
+    assert stored.status_code == 200
+    assert stored.json()["status"] == "running"
+    assert stored.json()["result"] is None
+
+
+def test_update_status_transition_conflict_returns_409(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Research",
+            "description": "Analyze market",
+        },
+    )
+
+    assert created.status_code == 201
+    task_id = created.json()["id"]
+
+    with patch.object(
+        TaskManager,
+        "update_status",
+        side_effect=TaskTransitionConflictError("Concurrent transition"),
+    ):
+        response = client.patch(
+            f"/tasks/{task_id}/status",
+            json={"status": "running"},
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Task state changed during transition"}
+
+
+def test_execute_transition_conflict_returns_409(
+    client: TestClient,
+) -> None:
+    created = client.post(
+        "/tasks",
+        json={
+            "title": "Research",
+            "description": "Analyze market",
+        },
+    )
+
+    assert created.status_code == 201
+    task_id = created.json()["id"]
+
+    with patch.object(
+        TaskManager,
+        "complete_task",
+        side_effect=TaskTransitionConflictError("Concurrent transition"),
+    ):
+        response = client.post(
+            f"/tasks/{task_id}/execute",
+            json={"operation": "market_research"},
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Task state changed during transition"}

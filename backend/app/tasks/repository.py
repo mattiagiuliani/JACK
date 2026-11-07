@@ -1,6 +1,7 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.tasks.db_models import TaskDB
@@ -68,3 +69,58 @@ class TaskRepository:
         self.session.refresh(db_task)
 
         return self._to_task(db_task)
+
+    def claim_pending_task(self, task_id: UUID) -> Task | None:
+        statement = (
+            update(TaskDB)
+            .where(
+                TaskDB.id == str(task_id),
+                TaskDB.status == TaskStatus.PENDING.value,
+            )
+            .values(status=TaskStatus.RUNNING.value)
+        )
+
+        result = self.session.execute(statement)
+        assert isinstance(result, CursorResult)
+
+        if result.rowcount != 1:
+            self.session.rollback()
+            return None
+
+        self.session.commit()
+        return self.get(task_id)
+
+    def transition_running_task(
+        self,
+        task_id: UUID,
+        new_status: TaskStatus,
+        result: str,
+    ) -> Task | None:
+        if new_status not in (
+            TaskStatus.COMPLETED,
+            TaskStatus.FAILED,
+        ):
+            raise ValueError("Target status must be completed or failed")
+
+        statement = (
+            update(TaskDB)
+            .where(
+                TaskDB.id == str(task_id),
+                TaskDB.status == TaskStatus.RUNNING.value,
+            )
+            .values(
+                status=new_status.value,
+                result=result,
+            )
+        )
+
+        execution_result = self.session.execute(statement)
+        assert isinstance(execution_result, CursorResult)
+
+        if execution_result.rowcount != 1:
+            self.session.rollback()
+            return None
+
+        self.session.commit()
+
+        return self.get(task_id)

@@ -6,8 +6,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.tasks.executor import TaskExecutor
-from app.tasks.manager import TaskManager, TaskNotFoundError
+from app.tasks.executor import TaskExecutionError, TaskExecutor
+from app.tasks.manager import (
+    TaskClaimError,
+    TaskManager,
+    TaskNotFoundError,
+    TaskTransitionConflictError,
+)
 from app.tasks.models import Task, TaskPriority, TaskStatus
 from app.tasks.operations import build_registry
 from app.tasks.registry import (
@@ -85,15 +90,23 @@ def update_task_status(
 ) -> Task:
     try:
         return manager.update_status(task_id, payload.status)
+
     except TaskNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Task not found",
         ) from exc
+
     except InvalidTaskTransitionError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
+        ) from exc
+
+    except TaskTransitionConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Task state changed during transition",
         ) from exc
 
 
@@ -115,7 +128,11 @@ def execute_task(
 
     try:
         manager.get_task(task_id)
-        return executor.execute_registered(task_id, payload.operation)
+
+        return executor.execute_registered(
+            task_id,
+            payload.operation,
+        )
 
     except TaskNotFoundError as exc:
         raise HTTPException(
@@ -133,4 +150,22 @@ def execute_task(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
+        ) from exc
+
+    except TaskClaimError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Task cannot be claimed for execution",
+        ) from exc
+
+    except TaskTransitionConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Task state changed during transition",
+        ) from exc
+
+    except TaskExecutionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Task execution failed",
         ) from exc

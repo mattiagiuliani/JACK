@@ -2,7 +2,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.tasks.manager import TaskManager, TaskNotFoundError
+from app.tasks.manager import TaskClaimError, TaskManager, TaskNotFoundError
 from app.tasks.models import TaskPriority, TaskStatus
 from app.tasks.state_machine import InvalidTaskTransitionError
 
@@ -131,3 +131,75 @@ def test_cannot_complete_pending_task(
 
     assert stored.status == TaskStatus.PENDING
     assert stored.result is None
+
+
+def test_fail_task(manager: TaskManager) -> None:
+    task = manager.create_task(
+        "Research",
+        "Analyze market",
+    )
+
+    manager.update_status(task.id, TaskStatus.RUNNING)
+
+    failed = manager.fail_task(
+        task.id,
+        "Connection timeout",
+    )
+
+    assert failed.status == TaskStatus.FAILED
+    assert failed.result == "Connection timeout"
+
+    stored = manager.get_task(task.id)
+
+    assert stored.status == TaskStatus.FAILED
+    assert stored.result == "Connection timeout"
+
+
+def test_cannot_fail_pending_task(
+    manager: TaskManager,
+) -> None:
+    task = manager.create_task(
+        "Research",
+        "Analyze market",
+    )
+
+    with pytest.raises(InvalidTaskTransitionError):
+        manager.fail_task(task.id, "Unexpected error")
+
+    stored = manager.get_task(task.id)
+
+    assert stored.status == TaskStatus.PENDING
+    assert stored.result is None
+
+
+def test_claim_pending_task(manager: TaskManager) -> None:
+    task = manager.create_task(
+        "Research",
+        "Analyze market",
+    )
+
+    claimed = manager.claim_task(task.id)
+
+    assert claimed.status == TaskStatus.RUNNING
+    assert manager.get_task(task.id).status == TaskStatus.RUNNING
+
+
+def test_claim_task_twice_raises_error(
+    manager: TaskManager,
+) -> None:
+    task = manager.create_task(
+        "Research",
+        "Analyze market",
+    )
+
+    manager.claim_task(task.id)
+
+    with pytest.raises(TaskClaimError):
+        manager.claim_task(task.id)
+
+
+def test_claim_nonexistent_task(
+    manager: TaskManager,
+) -> None:
+    with pytest.raises(TaskNotFoundError):
+        manager.claim_task(uuid4())

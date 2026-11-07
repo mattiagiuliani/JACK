@@ -9,6 +9,14 @@ class TaskNotFoundError(LookupError):
     """Raised when a task does not exist."""
 
 
+class TaskClaimError(RuntimeError):
+    """Raised when a task cannot be claimed for execution."""
+
+
+class TaskTransitionConflictError(RuntimeError):
+    """Raised when an atomic state transition loses a race."""
+
+
 class TaskManager:
     def __init__(
         self,
@@ -54,6 +62,34 @@ class TaskManager:
 
         return [task.model_copy(deep=True) for task in tasks]
 
+    def claim_task(self, task_id: UUID) -> Task:
+        if self._repository is not None:
+            claimed = self._repository.claim_pending_task(task_id)
+
+            if claimed is not None:
+                return claimed.model_copy(deep=True)
+
+            existing = self._repository.get(task_id)
+
+            if existing is None:
+                raise TaskNotFoundError(f"Task {task_id} not found")
+
+            raise TaskClaimError(
+                f"Task {task_id} cannot be claimed from status {existing.status.value}"
+            )
+
+        task = self.get_task(task_id)
+
+        if task.status != TaskStatus.PENDING:
+            raise TaskClaimError(
+                f"Task {task_id} cannot be claimed from status {task.status.value}"
+            )
+
+        transition_task(task, TaskStatus.RUNNING)
+
+        self._tasks[task_id] = task
+        return task.model_copy(deep=True)
+
     def update_status(
         self,
         task_id: UUID,
@@ -61,16 +97,67 @@ class TaskManager:
     ) -> Task:
         task = self.get_task(task_id)
 
+        # Validate the requested transition.
         transition_task(task, new_status)
 
         if self._repository is not None:
-            updated = self._repository.update(task)
+            if new_status == TaskStatus.RUNNING:
+                updated = self._repository.claim_pending_task(task_id)
+            else:
+                updated = self._repository.transition_running_task(
+                    task_id,
+                    new_status,
+                    task.result or "",
+                )
 
-            if updated is None:
+            if updated is not None:
+                return updated.model_copy(deep=True)
+
+            current = self._repository.get(task_id)
+
+            if current is None:
                 raise TaskNotFoundError(f"Task {task_id} not found")
 
-            return updated.model_copy(deep=True)
+            raise TaskTransitionConflictError(
+                f"Task {task_id} changed state during transition"
+            )
 
+        self._tasks[task_id] = task
+        return task.model_copy(deep=True)
+
+    def _transition_running_task(
+        self,
+        task_id: UUID,
+        new_status: TaskStatus,
+        result: str,
+    ) -> Task:
+        task = self.get_task(task_id)
+
+        # Preserve the existing state-machine validation.
+        transition_task(task, new_status)
+
+        if self._repository is not None:
+            updated = self._repository.transition_running_task(
+                task_id,
+                new_status,
+                result,
+            )
+
+            if updated is not None:
+                return updated.model_copy(deep=True)
+
+            # The conditional UPDATE did not modify any row.
+            # Distinguish deletion from a concurrent state change.
+            current = self._repository.get(task_id)
+
+            if current is None:
+                raise TaskNotFoundError(f"Task {task_id} not found")
+
+            raise TaskTransitionConflictError(
+                f"Task {task_id} changed state during transition"
+            )
+
+        task.result = result
         self._tasks[task_id] = task
         return task.model_copy(deep=True)
 
@@ -79,18 +166,19 @@ class TaskManager:
         task_id: UUID,
         result: str,
     ) -> Task:
-        task = self.get_task(task_id)
+        return self._transition_running_task(
+            task_id,
+            TaskStatus.COMPLETED,
+            result,
+        )
 
-        transition_task(task, TaskStatus.COMPLETED)
-        task.result = result
-
-        if self._repository is not None:
-            updated = self._repository.update(task)
-
-            if updated is None:
-                raise TaskNotFoundError(f"Task {task_id} not found")
-
-            return updated.model_copy(deep=True)
-
-        self._tasks[task_id] = task
-        return task.model_copy(deep=True)
+    def fail_task(
+        self,
+        task_id: UUID,
+        error: str,
+    ) -> Task:
+        return self._transition_running_task(
+            task_id,
+            TaskStatus.FAILED,
+            error,
+        )
