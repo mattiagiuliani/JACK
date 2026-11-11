@@ -10,7 +10,10 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     environment: str = "development"
 
-    research_provider: Literal["controlled", "wikipedia", "crossref"] = "controlled"
+    research_provider: Literal["controlled", "wikipedia", "crossref", "commercial"] = (
+        "controlled"
+    )
+    market_sources_json: str = "[]"
     research_language: Literal["en", "it", "de", "fr", "es"] = "en"
     research_user_agent: str = ""
     research_timeout: float = Field(default=8, ge=1, le=30)

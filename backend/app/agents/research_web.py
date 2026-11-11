@@ -55,8 +55,11 @@ class SafeTransport:
     The instance lock serializes requests and enforces a local rate limit.
     """
 
-    def __init__(self, config: WebConfig) -> None:
+    def __init__(
+        self, config: WebConfig, allowed_urls: frozenset[str] | None = None
+    ) -> None:
         self.config = config
+        self.allowed_urls = allowed_urls
         self._lock = threading.Lock()
         self._last = 0.0
 
@@ -72,9 +75,12 @@ class SafeTransport:
             or parsed.username
             or parsed.password
             or parsed.fragment
-            or not allowed_path
+            or (not allowed_path and self.allowed_urls is None)
         ):
             raise RetrievalError("URL blocked by fixed-origin policy")
+        if self.allowed_urls is not None:
+            if url not in self.allowed_urls:
+                raise RetrievalError("URL outside explicit page allowlist")
         host = parsed.hostname
         assert host is not None
         with self._lock:
@@ -285,6 +291,10 @@ def configured_research_provider() -> ResearchProvider:
     settings = get_settings()
     if settings.research_provider == "controlled":
         return ControlledResearchProvider()
+    if settings.research_provider == "commercial":
+        from app.agents.research_market import configured_market_provider
+
+        return configured_market_provider(settings)
     config = WebConfig(
         source=settings.research_provider,
         language=settings.research_language,

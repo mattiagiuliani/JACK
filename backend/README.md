@@ -104,7 +104,7 @@ silently replaced with invented findings. No Internet adapter is enabled here.
 Validation: `.venv/Scripts/ruff check .`, `.venv/Scripts/ruff format --check .`,
 `.venv/Scripts/pyright`, `.venv/Scripts/python -m pytest` from `backend`.
 
-## Milestone 09.4 � opt-in Internet research
+## Milestone 09.4 — opt-in Internet research
 
 `BusinessResearchAgent(provider=...)`, `execute(Task) -> str`, registry,
 orchestrator and HTTP/task lifecycle contracts are unchanged. Default operation
@@ -173,7 +173,7 @@ reported, not followed. Response sizes are bounded. Timeout applies to socket
 operations, not a hard total deadline; OS DNS timing is outside that limit.
 
 Requests are serialized/rate limited per transport instance. Reuse one provider
-per worker and coordinate quotas across workers. Bounded network retries (0�2)
+per worker and coordinate quotas across workers. Bounded network retries (0–2)
 use backoff; 429/503 and Wikipedia maxlag/ratelimited halt further retrieval
 without shortening Retry-After. Results deduplicate by page ID/normalized DOI.
 Search errors fail the task through the existing engine. Individual record
@@ -181,7 +181,7 @@ failures produce explicit partial-report limitations; systemic backpressure fail
 rather than masquerading as a complete report.
 
 robots.txt is retrieved each run and checked before search/content requests.
-A 404 means unavailable robots and permits access (RFC 9309 �2.3.1.3); all other
+A 404 means unavailable robots and permits access (RFC 9309 §2.3.1.3); all other
 HTTP failures, invalid encoding, denial or stricter crawl rates fail closed.
 No denial bypass is implemented. Review source terms before deployment:
 
@@ -195,14 +195,14 @@ Abstract markup is reduced to text. Downstream LLMs must independently isolate
 all quoted text, including titles, as untrusted data. This adapter cannot ensure
 prompt-injection safety for arbitrary later consumers of `task.result`.
 
-### Actual live attempts � separate from mock tests
+### Actual live attempts — separate from mock tests
 
 2026-11-11, Europe/Rome:
 
 - 02:23:54: Wikipedia, `market research`, one result, zero retries, five-second
   timeout. HTTPS robots retrieval succeeded but `/w/api.php` was disallowed.
   Raised `RetrievalError` before search/content. No evidence was produced.
-- 02:27:48�02:27:52: Crossref, `market research`, one result, zero retries,
+- 02:27:48–02:27:52: Crossref, `market research`, one result, zero retries,
   eight-second timeout. Robots returned 404; search and DOI retrieval succeeded.
   DOI `10.1177/1470785320941417`, publication date `2020-07-02`. No abstract was
   supplied, so the report explicitly contains title-only evidence. This verifies
@@ -222,3 +222,103 @@ From `backend`:
 Mocks cover provenance, date precision, duplicate results, missing content,
 robots denial/rate/404 rules, API errors, partial failure, private DNS, pinned TLS,
 redirect rejection, bounded network retries, size limits and configuration.
+
+## Milestone 09.5 — Commercial Market Intelligence
+
+09.4 baseline: `c08b248` (`feat(research): add live research providers`).
+Wikipedia remains encyclopedia context; Crossref remains scholarly metadata.
+Neither is repurposed as commercial demand evidence. Existing agent, task APIs,
+`ResearchProvider`, `Evidence` and `ResearchReport` contracts are unchanged.
+
+The opt-in `commercial` provider composes `MarketSource` policy validation,
+`PublicPageAdapter` retrieval/quote verification, and
+`CommercialResearchProvider` aggregation. No generated data or LLM calls.
+Source categories are reviewer-assigned and encoded in evidence IDs:
+`customer_problem:…`, `competitor:…`, `public_price:…`, `demand_signal:…`.
+Every observation retains the exact short quote, page URL, retrieval URL and UTC
+retrieval time. Source title is supplied by the reviewer. Dates not supplied by
+sources remain unknown. Hypotheses remain a separate existing report field and
+are empty: quotes never prove demand, representative customer pain, market size
+or willingness to pay. Missing categories are explicitly reported.
+
+### Configuration
+
+Default remains `RESEARCH_PROVIDER=controlled`. For public commercial collection:
+
+- Set `RESEARCH_PROVIDER=commercial`.
+- Set `RESEARCH_USER_AGENT` to an identifying agent with a real contact URL.
+- Set `MARKET_SOURCES_JSON` to a JSON array of reviewed source objects.
+- `RESEARCH_MAX_RESULTS` limits the configured source count (default 3, hard cap 5).
+- `RESEARCH_INTERVAL` (default 1 second, minimum 1) and `RESEARCH_TIMEOUT`
+  (default 8 seconds) retain their existing meanings.
+
+Each object requires `topic` (exact task description match), `category`, `url`,
+`title`, `quote` (1–160 characters, matching normalized static page text),
+`terms_url`, `review_note`, `terms_reviewed: true`, `privacy_reviewed: true`.
+Supply real reviewed values; there are intentionally no preapproved commercial
+sites or example market assertions. An empty array performs no network calls
+and returns explicit evidence gaps. Arrays beyond the result budget fail before
+network access. Unrelated topics perform no network calls.
+
+Before adding a source, review its current terms and reuse conditions at
+`terms_url`, document the decision/context in `review_note`, and confirm public,
+free automated access and a non-personal quotation. These flags are operator
+attestations, not an automatic terms checker or legal permission. Do not configure
+paid endpoints, login pages, personal profiles, private forums or sensitive data.
+The report includes the terms review URL; retain the reviewed configuration as
+an audit record. Email/phone-like quotes are rejected, but this heuristic cannot
+detect all personal data. Only the selected quote is retained, not the page body.
+
+### Retrieval and safety limits
+
+At most two GETs per configured source (robots plus one page), no retries in the
+configured commercial pipeline, at most ten GETs per research execution. Each
+response is capped at 64,000 bytes; no paid API, key, LLM, browser execution,
+link traversal, discovery search, cookies, credentials, environment proxy or
+redirect following. Per-origin transports share a lock and minimum interval
+within one provider instance. Multiple processes/instances are not globally rate
+limited; operators must serialize scheduled runs. Limits apply per execution,
+not as a persistent daily quota. Timeout is per socket operation, not an overall
+wall-clock deadline; streaming peers can extend execution time.
+
+HTTPS URLs must have no credentials, query, fragment or nonstandard port.
+The exact configured page URLs and robots URLs form the allowlist. Existing
+transport checks every DNS address is public, pins the validated destination,
+verifies TLS and rejects redirects, including redirects to private networks.
+Terms URLs are provenance only and are not automatically fetched.
+
+Robots are checked before every page. Denial, unavailable network/server,
+invalid UTF-8 or size overflow prevents collection. Existing transport treats a
+robots 404 as unavailable/allow, following RFC 9309 section 2.3.1.3
+(https://www.rfc-editor.org/rfc/rfc9309.html). Unsupported wildcard/end-anchor
+rules conservatively block commercial collection; restrictive crawl-delay or
+request-rate rules also block instead of increasing traffic. 429/503 stops the
+remaining pipeline, with an explicit partial-report limitation.
+
+Only normalized static UTF-8 HTML text is searched; script/style/template text
+is excluded. This is not a browser visibility check or semantic verification.
+JavaScript-only pages, other encodings, changed quotes, blocked sites or large
+pages yield no observation. Prices are quoted as stated; taxes, currency,
+region, billing period and promotional conditions require source review. No
+sentiment scoring, competitor ranking, automatic price parsing or inferred
+trends. Remote text is untrusted data, including any apparent instructions.
+
+### Validation
+
+`tests/test_research_market.py` uses synthetic pages and injected transports,
+never live websites. It covers provenance/contract compatibility, deduplication,
+category gaps, topic isolation, robots denial/rate/wildcard rules, changed or
+script-only quotes, invalid encoding, byte limits, privacy review, unsafe URLs,
+private DNS, allowlist enforcement, shared rate limiting and request budgets.
+Run from `backend`:
+
+```powershell
+.venv/Scripts/ruff.exe check .
+.venv/Scripts/ruff.exe format --check .
+.venv/Scripts/pyright.exe
+.venv/Scripts/python.exe -m pytest -q
+```
+
+No live commercial retrieval was performed for this milestone. Real sources
+must be selected and reviewed before opting in; offline test assertions are
+synthetic and are never presented as market findings.
