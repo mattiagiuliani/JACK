@@ -329,7 +329,7 @@ def test_decision_migration_roundtrip(tmp_path: Path, monkeypatch):
         ventures = [
             service.apply(key, Creation.model_validate(CREATE)) for key in ("a", "b")
         ]
-    migrations.upgrade(config, "head")
+    migrations.upgrade(config, "098_decisions")
     with engine.connect() as connection:
         assert MigrationContext.configure(connection).get_current_revision() == (
             "098_decisions"
@@ -353,7 +353,7 @@ def test_decision_migration_roundtrip(tmp_path: Path, monkeypatch):
         assert PortfolioService(session).list_all() == sorted(
             ventures, key=lambda v: str(v.id)
         )
-    migrations.upgrade(config, "head")
+    migrations.upgrade(config, "098_decisions")
     engine.dispose()
 
 
