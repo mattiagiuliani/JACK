@@ -12,6 +12,14 @@ from app.agents.registry import (
     AgentNotFoundError,
     AgentRegistry,
 )
+from app.agents.validation import (
+    Assessment,
+    BusinessValidationAgent,
+    EvidenceArgument,
+    Recommendation,
+    ValidationReport,
+    ValidationTest,
+)
 
 __all__ = [
     "Agent",
@@ -40,4 +48,14 @@ __all__ += [
     "Hypothesis",
     "ResearchProvider",
     "ResearchReport",
+]
+
+
+__all__ += [
+    "Assessment",
+    "BusinessValidationAgent",
+    "EvidenceArgument",
+    "Recommendation",
+    "ValidationReport",
+    "ValidationTest",
 ]

@@ -322,3 +322,70 @@ Run from `backend`:
 No live commercial retrieval was performed for this milestone. Real sources
 must be selected and reviewed before opting in; offline test assertions are
 synthetic and are never presented as market findings.
+
+## Milestone 09.6 — Business Validation Agent
+
+`BusinessValidationAgent.execute(Task) -> str` consumes a `ResearchReport` JSON
+from `Task.result` and returns a `ValidationReport` JSON. The topic must match
+`Task.description`. Missing/malformed input fails through the existing task
+engine. Existing research, orchestration and HTTP contracts are unchanged.
+
+Explicit registration and workflow (with an existing manager and task):
+
+```python
+from app.agents import (
+    AgentOrchestrator, AgentRegistry, BusinessResearchAgent,
+    BusinessValidationAgent, ControlledResearchProvider,
+)
+
+registry = AgentRegistry()
+registry.register("research", BusinessResearchAgent(ControlledResearchProvider()))
+registry.register("validation", BusinessValidationAgent())
+result = AgentOrchestrator(manager, registry).execute_workflow(
+    task.id, ["research", "validation"]
+)
+```
+
+The controlled provider makes this example deterministic and offline. Validation
+itself never calls a provider or network service. An explicitly configured live
+Research Agent keeps its existing retrieval policy; validation adds no paid API.
+
+The frozen Pydantic report contains the original research, four assessments
+(demand, willingness to pay, feasibility, competition), supporting/opposing
+arguments with checked evidence IDs, contextual observations, missing data,
+confidence with rationale, proposed tests and a reasoned recommendation.
+Unknown references, incomplete dimensions and unsupported recommendation claims
+are rejected. Source assertions and hypotheses remain untrusted data.
+
+No numeric score or probability is calculated. `insufficient` means no direct
+validation evidence; `limited` denotes provisional direct evidence;
+`corroborated` denotes direct relevant results independently reviewed, not an
+observation-count threshold. The current offline agent always reports
+`insufficient`: it cannot semantically establish support or contradiction from
+public-page text. Reviewer-assigned commercial categories route observations
+only. Public prices do not prove willingness to pay, anecdotes do not establish
+prevalence, and missing sources do not prove absent demand or competition.
+Controlled fixtures never establish real business confidence.
+
+Recommendation policy: no real observations -> `hold`; external observations ->
+`experiment` (a proposal to design tests, not evidence of viability). Models also
+represent `proceed` only with complete corroborated support in all dimensions,
+and `reject` only with corroborated contrary evidence. This agent does not emit
+these latter verdicts; interpretation of future direct experiment results needs
+an explicitly reviewed assessment process. All recommendations require human
+review and authorize no investment, purchase, price change or other economic
+action. Test plans require approval and pre-agreed acceptance/stop rules; they
+contain neither invented results nor arbitrary conversion thresholds.
+
+Validation checks:
+
+```powershell
+.venv/Scripts/ruff.exe check app tests
+.venv/Scripts/pyright.exe
+.venv/Scripts/python.exe -m pytest -q
+```
+
+Unit tests cover deterministic fixtures, commercial observations, untrusted
+text, missing data, invalid inputs/references, confidence/recommendation guards
+and task immutability. Integration tests cover Research -> Validation with SQLite
+persistence and failure handling through the existing orchestrator/task engine.
