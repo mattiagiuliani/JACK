@@ -1,6 +1,7 @@
-"""Offline business research with explicit provenance and no market inference."""
+"""Business research boundary with explicit provenance and no market inference."""
 
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Annotated, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
@@ -24,6 +25,13 @@ class Evidence(ResearchModel):
     source_title: Text
     excerpt: Text
     kind: Literal["controlled_fixture", "external"]
+
+    source_publication_date: Text | None = None
+    source_revision_uri: Text | None = None
+    retrieved_at: datetime | None = None
+    source_modified_at: datetime | None = None
+    retrieval_uri: Text | None = None
+    search_uri: Text | None = None
 
     @model_validator(mode="after")
     def validate_source(self) -> Self:
@@ -64,7 +72,7 @@ class ResearchReport(ResearchModel):
 
 
 class ResearchProvider(ABC):
-    """Future Internet adapters implement this boundary explicitly.
+    """Offline and Internet adapters implement this boundary explicitly.
 
     Adapters own retrieval, provenance and failure handling. Registration grants
     no network or spending authorization. Errors propagate to the task engine.
@@ -111,8 +119,10 @@ class BusinessResearchAgent(Agent):
     """Use task.description as the topic; return a JSON ResearchReport."""
 
     def __init__(self, provider: ResearchProvider | None = None) -> None:
+        from app.agents.research_web import configured_research_provider
+
         self._provider = (
-            provider if provider is not None else ControlledResearchProvider()
+            provider if provider is not None else configured_research_provider()
         )
 
     def execute(self, task: Task) -> str:
@@ -122,4 +132,4 @@ class BusinessResearchAgent(Agent):
         )
         if report.topic != topic:
             raise ValueError("Provider report topic does not match task description")
-        return report.model_dump_json()
+        return report.model_dump_json(exclude_none=True)

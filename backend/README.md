@@ -103,3 +103,122 @@ silently replaced with invented findings. No Internet adapter is enabled here.
 
 Validation: `.venv/Scripts/ruff check .`, `.venv/Scripts/ruff format --check .`,
 `.venv/Scripts/pyright`, `.venv/Scripts/python -m pytest` from `backend`.
+
+## Milestone 09.4 — opt-in Internet research
+
+`BusinessResearchAgent(provider=...)`, `execute(Task) -> str`, registry,
+orchestrator and HTTP/task lifecycle contracts are unchanged. Default operation
+remains offline. Evidence has optional additive provenance fields; old evidence
+remains valid and absent fields are omitted from agent output. No migration,
+paid API, new dependency, secret or startup network request is introduced.
+
+### Live configuration
+
+Set environment variables (or use the existing `.env`):
+
+```dotenv
+RESEARCH_PROVIDER=crossref
+RESEARCH_USER_AGENT=JACK/0.1 (https://github.com/mattiagiuliani/JACK)
+RESEARCH_TIMEOUT=8
+RESEARCH_INTERVAL=1
+RESEARCH_RETRIES=1
+RESEARCH_MAX_RESULTS=3
+```
+
+Use an accurate, contactable project URL or email for your deployment. The
+example identifies this repository. Missing/invalid live configuration fails
+validation instead of silently switching to fabricated/offline results. Restart
+after changing settings because the existing loader caches them. Use
+`RESEARCH_PROVIDER=controlled` to restore offline operation. No API key is needed.
+
+From `backend`, explicitly run:
+
+```powershell
+.venv/Scripts/python.exe -c "from app.agents.research_web import configured_research_provider; print(configured_research_provider().research('market research').model_dump_json(indent=2))"
+```
+
+Two source adapters implement the existing `ResearchProvider` boundary:
+
+- `crossref`: searches scholarly works, then fetches DOI records containing
+  metadata and available abstracts. Publisher pages and paywalls are not fetched.
+  Missing abstracts explicitly fall back to title-only evidence. Publication
+  dates preserve supplied year/month/day precision; unknown dates stay absent.
+- `wikipedia`: searches and retrieves introductory encyclopedia extracts;
+  `RESEARCH_LANGUAGE=en` selects en/it/de/fr/es. **Currently blocked by observed
+  robots policy**, as described below. Revision modification dates are distinct
+  from original publication dates. Cached extracts may differ from the reported
+  latest revision; the revision link is not an exact historical extract guarantee.
+
+These are source-specific Internet search/retrieval adapters, **not a general web
+search engine or sufficient market validation**. Coverage excludes much commercial
+web content. They do not infer demand, competitors, pricing or market size.
+Add further permitted adapters through the existing provider boundary; do not
+silently replace failed real searches with fixtures.
+
+### Provenance, safety and failure behavior
+
+Quotes retain source URLs, retrieval API URLs, search URLs, UTC retrieval times,
+and supplied publication/revision dates. They are untrusted source assertions,
+not independently verified facts. Hypotheses remain empty. Missing evidence
+never means missing demand. Retain attribution and inspect applicable reuse
+terms: Wikipedia text is CC BY-SA; Crossref abstracts can have author/publisher
+copyright even though most bibliographic metadata is unrestricted.
+
+The injectable transport enables offline tests. Network access permits only
+HTTPS and exact source origins/paths; userinfo, arbitrary ports, redirects and
+foreign/private DNS addresses are rejected. The socket connects directly to a
+validated public IP with hostname-verified TLS, preventing DNS rebinding.
+Environment proxies, cookies and credentials are not used. DOI/source links are
+reported, not followed. Response sizes are bounded. Timeout applies to socket
+operations, not a hard total deadline; OS DNS timing is outside that limit.
+
+Requests are serialized/rate limited per transport instance. Reuse one provider
+per worker and coordinate quotas across workers. Bounded network retries (0–2)
+use backoff; 429/503 and Wikipedia maxlag/ratelimited halt further retrieval
+without shortening Retry-After. Results deduplicate by page ID/normalized DOI.
+Search errors fail the task through the existing engine. Individual record
+failures produce explicit partial-report limitations; systemic backpressure fails
+rather than masquerading as a complete report.
+
+robots.txt is retrieved each run and checked before search/content requests.
+A 404 means unavailable robots and permits access (RFC 9309 §2.3.1.3); all other
+HTTP failures, invalid encoding, denial or stricter crawl rates fail closed.
+No denial bypass is implemented. Review source terms before deployment:
+
+- [Crossref access](https://www.crossref.org/documentation/retrieve-metadata/rest-api/access-and-authentication/)
+- [Crossref API and reuse](https://www.crossref.org/documentation/retrieve-metadata/rest-api/)
+- [Wikimedia API etiquette](https://www.mediawiki.org/wiki/API:Etiquette)
+- [Wikimedia usage policy](https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_API_Usage_Guidelines)
+
+No LLM, script, HTML rendering or tool invocation executes remote instructions.
+Abstract markup is reduced to text. Downstream LLMs must independently isolate
+all quoted text, including titles, as untrusted data. This adapter cannot ensure
+prompt-injection safety for arbitrary later consumers of `task.result`.
+
+### Actual live attempts — separate from mock tests
+
+2026-11-11, Europe/Rome:
+
+- 02:23:54: Wikipedia, `market research`, one result, zero retries, five-second
+  timeout. HTTPS robots retrieval succeeded but `/w/api.php` was disallowed.
+  Raised `RetrievalError` before search/content. No evidence was produced.
+- 02:27:48–02:27:52: Crossref, `market research`, one result, zero retries,
+  eight-second timeout. Robots returned 404; search and DOI retrieval succeeded.
+  DOI `10.1177/1470785320941417`, publication date `2020-07-02`. No abstract was
+  supplied, so the report explicitly contains title-only evidence. This verifies
+  connectivity/retrieval, not the truth of any market claim. Full unmodified
+  report: `research-live-crossref.json` (not a test fixture).
+
+### Offline verification
+
+From `backend`:
+
+```powershell
+.venv/Scripts/ruff.exe check app tests
+.venv/Scripts/pyright.exe
+.venv/Scripts/python.exe -m pytest -q
+```
+
+Mocks cover provenance, date precision, duplicate results, missing content,
+robots denial/rate/404 rules, API errors, partial failure, private DNS, pinned TLS,
+redirect rejection, bounded network retries, size limits and configuration.
