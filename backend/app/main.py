@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.db.session import SessionLocal
+from app.portfolio.decision_router import router as decision_router
 from app.portfolio.router import router as portfolio_router
 from app.tasks.manager import TaskManager
 from app.tasks.recovery import TaskRecovery
@@ -40,6 +41,7 @@ app = FastAPI(
 
 app.include_router(tasks_router)
 app.include_router(portfolio_router)
+app.include_router(decision_router)
 
 
 class HealthResponse(BaseModel):

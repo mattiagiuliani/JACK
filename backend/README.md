@@ -466,3 +466,85 @@ Verifiche: `python -m pytest`, `ruff check .`, `ruff format --check .`, `pyright
 idempotenza, lifecycle, pausa/ripresa, versioni stale, CAS concorrente e rollback,
 limiti/precisione monetaria, KPI osservati/stimati, workflow Research-Validation,
 report alterati/riferimenti mancanti e upgrade/downgrade della migrazione.
+
+## Milestone 09.8 - Portfolio Decision Engine
+
+API aggiuntive, senza modificare i contratti task o venture della 09.7:
+
+- `POST /portfolio-decisions` con `Idempotency-Key`: registra una comparazione
+  consultiva tra 2-50 venture, non esegue operazioni economiche.
+- `GET /portfolio-decisions/{id}`: restituisce report immutabile e revisione.
+- `POST /portfolio-decisions/{id}/review`: registra una sola revisione umana
+  con `actor`, `reason`, `outcome` (`acknowledged` o `rejected`). Ripetere la
+  stessa revisione e idempotente; cambiarla restituisce 409. Una venture cambiata
+  prima della verifica di revisione richiede un nuovo report (409).
+
+Esempio del corpo di creazione (sostituire gli ID con venture esistenti):
+
+```json
+{
+  "actor": "owner",
+  "reason": "Confronto del prossimo esperimento",
+  "candidates": [
+    {"venture_id": "00000000-0000-0000-0000-000000000001",
+     "expected_version": 7, "proposed_cost": "10"},
+    {"venture_id": "00000000-0000-0000-0000-000000000002",
+     "expected_version": 4, "proposed_cost": "20"}
+  ],
+  "criteria": [{
+    "name": "profit", "unit": "money", "currency": "EUR",
+    "period_start": "2026-10-01T00:00:00Z",
+    "period_end": "2026-10-31T00:00:00Z",
+    "minimum": "10",
+    "rationale": "Minimo concordato dall'operatore per questo periodo"
+  }],
+  "available_capital": {"EUR": "100"}
+}
+```
+
+I criteri sono minimi dichiarati dall'operatore, con motivazione obbligatoria:
+nessun punteggio, peso, classifica o soglia economica inventata dal motore.
+Ogni KPI e confrontabile solo per nome, unita, valuta e periodo identici.
+Serve esattamente una misura osservata per criterio; duplicati ambigui,
+periodi futuri o sole stime comportano astensione. Le stime rimangono separate
+nei confronti e nel report. Non vengono calcolati ROI o conversioni valutarie.
+
+Regole conservative, nell'ordine:
+
+1. Venture paused/closed: `abstain`, senza riattivazione.
+2. Costo proposto oltre budget/capitale residuo (sottratto lo speso), o somma
+   dei costi proposti oltre il capitale dichiarato nella stessa valuta:
+   `suspend`, proposta di sospendere il piano e richiedere priorita umane.
+3. Ultima validazione esterna con rigetto corroborato: `suspend`.
+4. Evidenze reali, KPI o capitale mancanti: `abstain`.
+5. Supporto incompleto/provvisorio o KPI sotto il minimo: `investigate`.
+6. Venture operating con tutti i minimi soddisfatti e validazione esterna
+   completa, supportata e corroborata: `expand` se costo positivo, altrimenti
+   `maintain`. Altri stati attivi: `investigate`.
+
+Un vincolo economico noto puo quindi bloccare un piano anche con dati mancanti.
+`suspend` ed `expand` sono raccomandazioni, mai transizioni o autorizzazioni.
+La revisione `acknowledged` non approva spese, non prenota capitale e non cambia
+venture. Il capitale disponibile e dichiarato dal chiamante, non un saldo
+verificato o riservato. Nessuna chiamata di rete, pagamento o agente esecutivo.
+
+Il report conserva richiesta, autore/motivo, versione motore, data UTC,
+snapshot e storie complete (incluse fonti, metodi, evidenze e limitazioni della
+validazione), motivazioni e confronti per valuta e KPI. L'ultima validazione
+collegata sostituisce quelle precedenti ai fini della raccomandazione;
+fixture e semplici osservazioni di pagine pubbliche non sostengono espansione.
+Le versioni attese proteggono da richieste obsolete; chiavi riutilizzate con
+corpi diversi danno 409, risorse mancanti 404, input non validi 422.
+
+Come nella 09.7, autore e revisore sono dichiarati, senza autenticazione/RBAC;
+l'audit e immutabile attraverso il servizio, non contro accesso SQL diretto.
+La revisione attesta gli snapshot al controllo di versione, non blocca futuri
+aggiornamenti concorrenti e non sostituisce una verifica prima di azioni reali.
+Storie complete possono crescere: paginazione e limiti di dimensione sono
+necessari prima di usare questa fondazione con grandi portafogli.
+
+Migrazione `098_decisions` dopo `097_portfolio`: aggiunge solo
+`portfolio_decisions`, con richiesta/report e revisione persistenti.
+I test usano database temporanei: verificano l'intera catena Alembic, dati
+09.7 preservati, scrittura/lettura del report, downgrade e nuovo upgrade.
+Il database locale non viene migrato dalle verifiche.
