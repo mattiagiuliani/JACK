@@ -334,8 +334,11 @@ Explicit registration and workflow (with an existing manager and task):
 
 ```python
 from app.agents import (
-    AgentOrchestrator, AgentRegistry, BusinessResearchAgent,
-    BusinessValidationAgent, ControlledResearchProvider,
+    AgentOrchestrator,
+    AgentRegistry,
+    BusinessResearchAgent,
+    BusinessValidationAgent,
+    ControlledResearchProvider,
 )
 
 registry = AgentRegistry()
@@ -389,3 +392,77 @@ Unit tests cover deterministic fixtures, commercial observations, untrusted
 text, missing data, invalid inputs/references, confidence/recommendation guards
 and task immutability. Integration tests cover Research -> Validation with SQLite
 persistence and failure handling through the existing orchestrator/task engine.
+
+## Milestone 09.7 - Business Portfolio Foundation
+
+Portafoglio multi-business persistente, separato da Task Engine e Agent
+Orchestrator senza modificare i loro contratti. Ogni venture conserva identita,
+descrizione/topic, valuta contabile fissa, stato, budget, capitale massimo,
+speso registrato e versione. Nessuno scoring o investimento automatico.
+
+### Persistenza e avvio
+
+Da backend eseguire `.venv\Scripts\alembic.exe upgrade head` prima di usare le API.
+La migrazione `097_portfolio` aggiunge `ventures` e `portfolio_events`; non viene
+applicata automaticamente. I test usano solo database temporanei.
+Snapshot ed eventi sono JSON validati Pydantic. Importi Decimal serializzati come
+stringhe, massimo 24 cifre e 6 decimali: nessun arrotondamento binario o cambio
+implicito. Valute nel formato a tre lettere maiuscole, senza catalogo ISO esterno.
+Nessuna aggregazione automatica tra valute, periodi o KPI non comparabili.
+
+### API e idempotenza
+
+- `POST /ventures`: `{actor, reason, venture: {name, description, currency,
+  capital_limit, budget}}`; crea in stato `idea`, versione 1.
+- `GET /ventures` e `GET /ventures/{id}`: elenco e snapshot corrente.
+- `POST /ventures/{id}/commands`: `{actor, reason, expected_version, change}`.
+- `GET /ventures/{id}/history`: eventi ordinati con autore dichiarato, motivo,
+  data UTC, richiesta completa e snapshot risultante. KPI e report sono negli eventi.
+
+Ogni scrittura richiede `Idempotency-Key`: 1-200 caratteri ASCII tra lettere,
+cifre, `_`, `.`, `:`, `-`. Chiavi globali persistenti. Stessa chiave e richiesta:
+risposta originale anche dopo altri aggiornamenti. Riuso per altro corpo o venture:
+409. Versione attesa, aggiornamento SQL condizionale e vincoli univoci prevengono
+aggiornamenti persi e duplicati. Snapshot, audit e ricevuta sono atomici.
+Per conflitto concorrente, riprovare la stessa richiesta con la stessa chiave per
+recuperare un eventuale risultato gia registrato. Se occorre cambiare versione o
+corpo, rileggere lo stato e usare una nuova chiave. 404: venture assente;
+409: conflitto/transizione/limite; 422: dati non validi.
+
+`change.kind` seleziona:
+
+- `transition`: `status`. Percorso `idea -> researching -> validating ->
+  experimenting -> operating`; `experimenting -> validating` consente nuovi test.
+  Ogni stato attivo puo chiudersi; ogni stato salvo `idea` puo andare in `paused`.
+  La ripresa torna solo allo stato precedente. `closed` e terminale.
+  Nessuna raccomandazione causa transizioni automatiche.
+- `limits`: `capital_limit`, `budget`, con speso <= budget <= capitale, non negativi.
+- `expense`: `amount`, `currency`, `incurred_at` con fuso, `description`,
+  `external_reference`. Registra spese gia sostenute senza effettuare transazioni.
+  Valuta uguale alla venture e riferimento unico per venture anche con chiavi
+  diverse. Registrazioni oltre budget/capitale rifiutate: aggiornare esplicitamente
+  i limiti prima di registrarle. Rettifiche, rimborsi e riconciliazione sono futuri;
+  questa fondazione non e un sistema contabile completo.
+- `metric`: `name`, `value` anche negativo, `unit`, `basis` (`observed`/`estimated`),
+  `period_start`, `period_end`, `source`, `methodology`. Periodi con fuso e ordinati.
+  `unit=money` richiede `currency`, altre unita la omettono. Ogni rilevazione resta
+  nell'audit; stime e KPI non incrementano lo speso. Nessun ROI automatico.
+- `assessment`: `task_id`, `report` ValidationReport completo, `evidence_ids`.
+  Richiede task completato con WorkflowResult riuscito, report identico a un output
+  dello stesso workflow e topic uguale alla descrizione della venture. ID evidenza
+  presenti nel ResearchReport incluso. Lo snapshot conserva assessment, evidenze
+  e provenienza anche se cambia il task originale. Restano i vincoli della 09.6
+  sui dati fixture e sulla revisione umana.
+
+Autore e motivo sono dichiarazioni dell'operatore, non identita autenticate.
+Come le API task, questa fondazione non introduce autenticazione/RBAC. L'audit e
+append-only attraverso il servizio, non antimanomissione contro accesso SQL diretto.
+Una sessione dedicata per richiesta. Grandi portafogli richiederanno paginazione e
+proiezioni SQL dei dati economici oggi salvati negli eventi. Nessun pagamento,
+chiamata di rete, approvazione o allocazione automatica di capitale.
+
+Verifiche: `python -m pytest`, `ruff check .`, `ruff format --check .`, `pyright`.
+16 nuovi test offline deterministici coprono multi-business, persistenza,
+idempotenza, lifecycle, pausa/ripresa, versioni stale, CAS concorrente e rollback,
+limiti/precisione monetaria, KPI osservati/stimati, workflow Research-Validation,
+report alterati/riferimenti mancanti e upgrade/downgrade della migrazione.
