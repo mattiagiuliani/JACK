@@ -1,6 +1,6 @@
 # JACK
 
-Orchestratore privato multi-agente per business digitali. Il backend attuale offre task persistenti, workflow sequenziali, ricerca con provenienza, validazione prudenziale, portafoglio, raccomandazioni e pianificazione MVP. Non sviluppa o distribuisce prodotti autonomamente e non esegue pagamenti o allocazioni di capitale.
+Orchestratore privato multi-agente per business digitali. Il backend offre task persistenti, workflow sequenziali, ricerca con provenienza, validazione prudenziale, portafoglio, raccomandazioni e pianificazione MVP. La 10.2 v1 genera prototipi statici locali da piani approvati; non implementa automaticamente il comportamento del prodotto, non esegue codice o distribuzioni, pagamenti o allocazioni di capitale.
 
 [Indice completo e navigabile](docs/milestones/README.md) · [Backend e verifiche](backend/README.md) · [Fonti storiche e lacune](docs/milestones/SOURCES.md)
 
@@ -16,10 +16,10 @@ Orchestratore privato multi-agente per business digitali. Il backend attuale off
 - [09.7 — Business Portfolio](docs/milestones/09.7-business-portfolio.md)
 - [09.8 — Portfolio Decision Engine](docs/milestones/09.8-portfolio-decisions.md)
 - [10.1 — Execution Planner](docs/milestones/10.1-execution-planner.md)
+- [10.2 v1 — Development Agent: prototipi statici](docs/milestones/10.2-development-agent.md)
 
 ## Milestone future — proposte
 
-- [10.2 — Development Agent](docs/milestones/10.2-development-agent.md)
 - [10.3 — Sandbox & Execution Runtime](docs/milestones/10.3-sandbox-execution-runtime.md)
 - [10.4 — QA & Security Agent](docs/milestones/10.4-qa-security-agent.md)
 - [10.5 — Deployment Agent](docs/milestones/10.5-deployment-agent.md)

@@ -2,7 +2,7 @@
 
 [Progetto](../../README.md) · [Fonti e lacune](SOURCES.md) · [Template](TEMPLATE.md) · [Verifiche](VERIFICATION.md)
 
-Baseline analizzata: `2d75ebd4258e64b5da888bf85d54de53da372104`, 11 novembre 2026. Le capacita implementate terminano alla 10.1. Nessuna percentuale di completamento del prodotto e deducibile dal numero di milestone.
+Baseline storica: `2d75ebd4258e64b5da888bf85d54de53da372104`, 11 novembre 2026. Aggiornamento del 22 novembre: aggiunta la 10.2 v1 per prototipi statici da piani approvati; sviluppo applicativo generale ed esecuzione restano futuri. Nessuna percentuale di completamento del prodotto e deducibile dal numero di milestone.
 
 | Milestone | Contenuto | Stato |
 | --- | --- | --- |
@@ -16,7 +16,7 @@ Baseline analizzata: `2d75ebd4258e64b5da888bf85d54de53da372104`, 11 novembre 202
 | [09.7](09.7-business-portfolio.md) | Business Portfolio | IMPLEMENTATA |
 | [09.8](09.8-portfolio-decisions.md) | Portfolio Decision Engine | IMPLEMENTATA |
 | [10.1](10.1-execution-planner.md) | Execution Planner | IMPLEMENTATA |
-| [10.2](10.2-development-agent.md) | Development Agent | PROPOSTA / FUTURA |
+| [10.2](10.2-development-agent.md) | Development Agent | IMPLEMENTATA V1: prototipi statici |
 | [10.3](10.3-sandbox-execution-runtime.md) | Sandbox & Execution Runtime | PROPOSTA / FUTURA |
 | [10.4](10.4-qa-security-agent.md) | QA & Security Agent | PROPOSTA / FUTURA |
 | [10.5](10.5-deployment-agent.md) | Deployment Agent | PROPOSTA / FUTURA |
@@ -55,7 +55,8 @@ flowchart LR
   Validation --> Portfolio[09.7 Portafoglio]
   Portfolio --> Decision[09.8 Decisioni consultive]
   Decision --> Planner[10.1 Piano MVP]
-  Planner -. proposta futura .-> Build[10.2-10.6 Sviluppo e release]
+  Planner --> Prototype[10.2 v1 Prototipo statico locale]
+  Prototype -. proposta futura .-> Build[10.3-10.6 Runtime QA e release]
   Build -. proposta futura .-> Growth[11.x Monetizzazione]
   Growth -. proposta futura .-> Operations[12.x Operazioni e politiche]
   Operations -. proposta futura .-> Ecosystem[13-15 Evoluzione integrata]

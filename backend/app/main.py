@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.db.session import SessionLocal
+from app.development.router import router as development_router
 from app.portfolio.decision_router import router as decision_router
 from app.portfolio.planning_router import router as planning_router
 from app.portfolio.router import router as portfolio_router
@@ -44,6 +45,7 @@ app.include_router(tasks_router)
 app.include_router(portfolio_router)
 app.include_router(decision_router)
 app.include_router(planning_router)
+app.include_router(development_router)
 
 
 class HealthResponse(BaseModel):

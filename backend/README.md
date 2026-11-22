@@ -47,3 +47,10 @@ solo dopo aver scelto e verificato il database da utilizzare.
 - [09.7 — Business Portfolio](../docs/milestones/09.7-business-portfolio.md)
 - [09.8 — Portfolio Decision Engine](../docs/milestones/09.8-portfolio-decisions.md)
 - [10.1 — Execution Planner](../docs/milestones/10.1-execution-planner.md)
+- [10.2 v1 — Development Agent](../docs/milestones/10.2-development-agent.md)
+
+La 10.2 genera bundle di prototipi statici da piani approvati con
+`POST /development-artifacts`. L'esportazione locale richiede una richiesta
+separata e `DEVELOPMENT_WORKSPACE_ROOT` configurata dall'operatore prima
+dell'avvio. Non esegue i file o installa pacchetti. Contratti, esempi, manifest,
+limiti e recupero da errori sono nella scheda 10.2.

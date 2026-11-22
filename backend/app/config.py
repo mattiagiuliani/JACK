@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     app_name: str = "JACK API"
     app_version: str = "0.1.0"
     environment: str = "development"
+    development_workspace_root: str | None = None
 
     research_provider: Literal["controlled", "wikipedia", "crossref", "commercial"] = (
         "controlled"

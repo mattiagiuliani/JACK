@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from app.db.base import Base
 from app.db.session import DATABASE_URL
+from app.development import service as development_models  # noqa: F401
 from app.portfolio import db_models as portfolio_models  # noqa: F401
 from app.portfolio import decisions, planning  # noqa: F401
 from app.tasks import db_models  # noqa: F401
