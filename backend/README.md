@@ -9,6 +9,22 @@ La documentazione tecnica e gli esempi delle milestone sono stati conservati nei
 
 [Panoramica progetto](../README.md) · [Indice milestone](../docs/milestones/README.md)
 
+## Ripristino da una nuova copia (Windows, da backend)
+
+Usare Python 3.12 e creare un ambiente dedicato:
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m pip check
+```
+
+Il file delle dipendenze include SQLAlchemy e Alembic, necessari alla
+persistenza, e Ruff/Pyright per eseguire i controlli riportati sotto.
+L'installazione non crea o migra il database locale. I test usano database
+temporanei; per avviare il servizio con dati locali, applicare le migrazioni
+solo dopo aver scelto e verificato il database da utilizzare.
+
 ## Verifiche (Windows, da backend)
 
 ```powershell
